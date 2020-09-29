@@ -1,7 +1,16 @@
+'''
+Author: Ciyuan YU
+Date: 2020-08-31 22:06:14
+LastEditTime: 2020-09-23 22:58:33
+LastEditors: Please set LastEditors
+Description: Calculate CpG data to find the combination with largest impact on cervical tumor
+FilePath: /CpG_data_analysis/cpgs_selection_v1.0.py
+'''
 import numpy as np
 import pandas as pd
 import math
 from itertools import combinations
+import copy
 import argparse
 
 class data_container:
@@ -29,6 +38,8 @@ class data_container:
     def _organize_raw_data(self):
         # drop the sequential numbers of labels
         self.label_obj.drop(self.label_obj.columns[0], axis=1, inplace=True)
+        self.label_obj.replace("Tumor", 1, inplace=True)
+        self.label_obj.replace("Normal", 0, inplace=True)
         
         # convert the matrix of cpg data
         self.cpg_obj.set_index("Unnamed: 0", inplace=True)
@@ -41,12 +52,6 @@ class data_container:
         self.cpg_features_size = self.cpg_obj.shape[1]
         return
     
-    def read_and_organize_data(self):
-        self._read_files()
-        self._organize_raw_data()
-        self.print_data()
-        return
-    
     def print_data(self):
         print("\n####### cpg data #######\n")
         print(self.cpg_obj)
@@ -54,11 +59,27 @@ class data_container:
         print(self.label_obj)
         print("\n####### Above are raw data we have after organization #######\n")
         return
+
+    def read_and_organize_data(self):
+        self._read_files()
+        self._organize_raw_data()
+        self.print_data()
+        return
     
     def save_transformed_csv(self):
         self.cpg_obj.to_csv("cpg_data_transformed.csv")
         self.label_obj.to_csv("label_transformed.csv")
-        pass
+        return
+
+    ##### discretize raw data #####
+    def _discretize_data(self):
+        self.discret_matrix = copy.deepcopy(self.cpg_obj)
+        intervals = [x/10 for x in range(11)]
+        label_values = [y/10 for y in range(1, 11)]
+        for i in range(self.discret_matrix.shape[1]):
+            discretized_column = pd.cut(self.cpg_obj.iloc[:, i], bins=intervals, labels=label_values)
+            self.discret_matrix.iloc[:, i] = discretized_column
+        return
 
     ##### compute entropy related information #####
     def _build_entropy_matrix(self):
