@@ -1,7 +1,7 @@
 '''
 Author: Ciyuan Yu
 Date: 2020-09-23 21:31:12
-LastEditTime: 2020-09-28 09:19:24
+LastEditTime: 2020-10-15 10:07:15
 LastEditors: Please set LastEditors
 Description: Use to test functinons in cpgs_selection
 FilePath: /CpG_data_analysis/function_test.py
@@ -46,31 +46,54 @@ def discret_column(df):
          df_new.iloc[:, i] = disc_column
     return df_new
 
-def calc_one_column_info_gain(data_column):
+def calc_one_column_info_gain(data_column, test_print=True):
     ig = copy.deepcopy(data_column)
     p_x_list = ig.value_counts() / ig.shape[0]
     p_y_list = labels_s.value_counts() / labels_s.shape[0]
-    p_x_y_eql_0 = data_column[labels_s[:]==0].value_counts() / labels_s.shape[0]
-    p_x_y_eql_1 = data_column[labels_s[:]==1].value_counts() / labels_s.shape[0]
+    p_x_y_0 = data_column[labels_s[:]==0].value_counts() / labels_s.shape[0]
+    p_x_y_1 = data_column[labels_s[:]==1].value_counts() / labels_s.shape[0]
 
-    print("\np_x_list:\n", p_x_list)
-    print("\np_y_list:\n", p_y_list)
-    print("\np_x_y_eql_0:\n", p_x_y_eql_0)
-    print("\np_x_y_eql_1:\n", p_x_y_eql_1)
+    if test_print:
+    #     print("\n***** Probs of data cells：*****")
+    #     print("p_x\tp_y\tp_x_y_0\tp_x_y_1")
+    #     for i in range(ig.shape[0]):
+    #         if(len(p_x_list)-1 >= i):  print("%.2f" % p_x_list[i], end="\t")
+    #         if(len(p_y_list)-1 >= i):  print("%.2f" % p_y_list[i], end="\t")
+    #         if(len(p_x_y_0)-1 >= i):   print("%.2f" % p_x_y_0[i], end="\t")
+    #         if(len(p_x_y_1)-1 >= i):   print("%.2f" % p_x_y_1[i])
+
+        print("\np_x_list:\n", p_x_list)
+        print("\np_y_list:\n", p_y_list)
+        print("\np_x_y_eql_0:\n", p_x_y_0)
+        print("\np_x_y_eql_1:\n", p_x_y_1)
 
     for i in range(ig.shape[0]):
-        # calculate the h(x)
+        entropy_x = 0
+        entropy_x_y = 0
+
+        # calculate the single entropy h(x)
         x = ig[i]
         p_x = p_x_list[x]
-        ig[i] = -p_x * math.log(p_x, 2)
+        entropy_x = -p_x * math.log(p_x, 2)
 
-        # calculate the h(x | y)
+        # calculate the h(x|y)
         y = labels_s[i]
         p_y = p_y_list[y]
-        if y == 0 or y == 1:
-            ig[i] += -p_y * math.log(p_y, 2)
+        factor = p_y
+        if y == 0:
+            factor *= p_x_y_0[x]
+        elif y == 1:
+            factor *= p_x_y_1[x]
         else:
-            raise ValueError(f"There is a wrong label value in line {i+1}")
+            raise ValueError(f"Wrong label value in line {i+1}")
+        entropy_x_y = -factor * math.log(factor, 2)
+
+        ig[i] = entropy_x + entropy_x_y
+
+    print("\n******** Ig of one column *********")
+    print(ig)
+
+    #return ig
         
 
 # def calc_all_info_gain(disc_df, labels_s):
@@ -84,6 +107,6 @@ def calc_one_column_info_gain(data_column):
 
 if __name__ == "__main__":
     df_new = discret_column(data_df)
-    print(df_new)
+    print(f"\n********* Discretized matrix ***********\n{df_new}\n")
     calc_one_column_info_gain(df_new.iloc[:, 1])
     
