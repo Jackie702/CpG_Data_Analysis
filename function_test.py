@@ -31,13 +31,14 @@ raw_data = [
 [0.592801,	    0.476418061,	0.969831435,	0.787532451,	0.549660282,	0.360043341,	0.659717221,	0.698255048,	0.503217119],
 [0.86888519,	0.794145655,	0.964330332,	0.808215488,	0.544354174,	0.732794098,	0.762759475,	0.718958576,	0.795738141]
 ]
-data_df = pd.DataFrame(raw_data)
+data_df = pd.DataFrame(raw_data)  # Pandas dataFrame of raw data
 data_df.columns = titles
 
 labels = [1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 1]
 labels_s = pd.Series(labels)
 
-def discret_column(df):
+# discretize all raw data
+def discretize_all(df):
     df_new = copy.deepcopy(df)
     intervals = [x/10 for x in range(11)]
     disc_values = [y for y in range(1, 11)]
@@ -46,67 +47,143 @@ def discret_column(df):
          df_new.iloc[:, i] = disc_column
     return df_new
 
-def calc_one_column_info_gain(data_column, test_print=True):
-    ig = copy.deepcopy(data_column)
-    p_x_list = ig.value_counts() / ig.shape[0]
-    p_y_list = labels_s.value_counts() / labels_s.shape[0]
-    p_x_y_0 = data_column[labels_s[:]==0].value_counts() / labels_s.shape[0]
-    p_x_y_1 = data_column[labels_s[:]==1].value_counts() / labels_s.shape[0]
+# calculate a columns of info entropy + conditional entropy
+def calc_one_column_info_gain(data_column):
+    p_x_list = data_column.value_counts() / data_column.shape[0]    # calculate the probility of each x element
+    p_y_list = labels_s.value_counts() / labels_s.shape[0]          # calculate the probility of each y element
 
-    if test_print:
-    #     print("\n***** Probs of data cells：*****")
-    #     print("p_x\tp_y\tp_x_y_0\tp_x_y_1")
-    #     for i in range(ig.shape[0]):
-    #         if(len(p_x_list)-1 >= i):  print("%.2f" % p_x_list[i], end="\t")
-    #         if(len(p_y_list)-1 >= i):  print("%.2f" % p_y_list[i], end="\t")
-    #         if(len(p_x_y_0)-1 >= i):   print("%.2f" % p_x_y_0[i], end="\t")
-    #         if(len(p_x_y_1)-1 >= i):   print("%.2f" % p_x_y_1[i])
+    print("\np_x_list:\n", p_x_list)
+    print("\np_y_list:\n", p_y_list)
 
-        print("\np_x_list:\n", p_x_list)
-        print("\np_y_list:\n", p_y_list)
-        print("\np_x_y_eql_0:\n", p_x_y_0)
-        print("\np_x_y_eql_1:\n", p_x_y_1)
-
-    for i in range(ig.shape[0]):
-        entropy_x = 0
-        entropy_x_y = 0
-
-        # calculate the single entropy h(x)
-        x = ig[i]
-        p_x = p_x_list[x]
-        entropy_x = -p_x * math.log(p_x, 2)
-
-        # calculate the h(x|y)
-        y = labels_s[i]
-        p_y = p_y_list[y]
-        factor = p_y
-        if y == 0:
-            factor *= p_x_y_0[x]
-        elif y == 1:
-            factor *= p_x_y_1[x]
+    H_x = 0
+    for i in range(p_x_list.shape[0]):
+        print(f"p_x_list[{i}]={p_x_list[i]}")
+        if p_x_list[i] == 0:
+            continue
         else:
-            raise ValueError(f"Wrong label value in line {i+1}")
-        entropy_x_y = -factor * math.log(factor, 2)
+            H_x += -(p_x_list[i] * math.log(p_x_list[i], 2))
 
-        ig[i] = entropy_x + entropy_x_y
+    print("\nH_x:\n", H_x)
 
-    print("\n******** Ig of one column *********")
-    print(ig)
+    x_label_eql_0 = data_column[labels_s[data_column.index] == 0]       # get numbers whose label is 0
+    x_label_eql_1 = data_column[labels_s[data_column.index] == 1]       # get numbers whose lable is 1
+    
+    print(f"x_label_eql_0: {x_label_eql_0}")
+    print(f"x_label_eql_1: {x_label_eql_1}\n")
+    
+    p_x_y_0 = x_label_eql_0.value_counts() / x_label_eql_0.shape[0]     # calculate p(X|Y=0)
+    p_x_y_0 = np.array([n for n in p_x_y_0 if n != 0])                  # eliminate 0 elements for logarithm
+    p_x_y_1 = x_label_eql_1.value_counts() / x_label_eql_1.shape[0]     # calculate p(X|Y=1)
+    p_x_y_1 = np.array([n for n in p_x_y_1 if n != 0])                  # eliminate 0 elements for logarithm
+    
+    print(f"p_x_y_0: {p_x_y_0}")
+    print(f"p_x_y_1: {p_x_y_1}\n")
+    
+    H_x_y_eql_0 = - (p_x_y_0 * np.log2(p_x_y_0)).sum()                  # calculate conditional entropy H(X|Y=0)
+    H_x_y_eql_1 = - (p_x_y_1 * np.log2(p_x_y_1)).sum()                  # calculate conditional entropy H(X|Y=1)
+    
+    print("\nH_x_y_eql_0:\n", H_x_y_eql_0)
+    print("\nH_x_y_eql_1:\n", H_x_y_eql_1)
+    
+    H_x_y = p_y_list[0] * H_x_y_eql_0 + p_y_list[1] * H_x_y_eql_1       # calculate conditon entropy H(X|Y=label)
+    
+    print("\nH_x_y:\n", H_x_y)
 
-    #return ig
+    return H_x + H_x_y
+
+def calc_all_info_gain(disc_data):
+    ig_list = []
+    
+    # calculate infomation gain column by column, with sequence number in the list
+    # [(index 0, ig 0), (index 1, ig 1), ..., (index N, ig N)]
+    for i in range(disc_data.shape[1]):
+        ig = calc_one_column_info_gain(disc_data.iloc[:, i])
+        ig_list.append((i, ig))
+    
+    return ig_list
+
+def sort_and_filt(ig_list, threshold):
+    ig_list.sort(key=lambda x: x[1], reverse=True)  # sort the list in descending order
+    
+    # eliminate features whose info gain is less than threshold
+    filtered_igs = []
+    for i in range(len(ig_list)):
+        if ig_list[i][1] >= threshold:
+            filtered_igs.append(ig_list[i])
+        else:
+            break
         
+    return filtered_igs
 
-# def calc_all_info_gain(disc_df, labels_s):
-#     info_gain_mat = copy.deepcopy(disc_df)
-#     for i in range(disc_df.shape[1]):
-#         value_counts = disc_df.iloc[:, i].value_counts()
-#         for j in range(disc_df.shape[0]):
-#             p_x = disc_df.iloc[i, j]
-#             info_gain_mat.iloc[i, j] = 
-#     pass
 
 if __name__ == "__main__":
-    df_new = discret_column(data_df)
-    print(f"\n********* Discretized matrix ***********\n{df_new}\n")
-    calc_one_column_info_gain(df_new.iloc[:, 1])
+    disc_mat = discretize_all(data_df)
+    print(f"\n********* Discretized matrix ***********\n{disc_mat}\n")
+    calc_one_column_info_gain(disc_mat.iloc[:, 0])
     
+
+    
+    
+    
+    
+############# Function Draft Here ##################
+# calculate a columns of info entropy + conditional entropy
+# def calc_one_column_info_gain(data_column):
+#     ig = copy.deepcopy(data_column)                 # deep copy a column of discritized data
+#     p_x_list = ig.value_counts() / ig.shape[0]      # discretize raw data
+#     p_y_list = labels_s.value_counts() / labels_s.shape[0]  # descretize label data
+#     p_x_y_0 = data_column[labels_s[:]==0].value_counts() / labels_s.shape[0]
+#     p_x_y_1 = data_column[labels_s[:]==1].value_counts() / labels_s.shape[0]
+
+#     # print("\n***** Probs of data cells：*****")
+#     # print("p_x\tp_y\tp_x_y_0\tp_x_y_1")
+#     # for i in range(ig.shape[0]):
+#     #     if(len(p_x_list)-1 >= i):  print("%.2f" % p_x_list[i], end="\t")
+#     #     if(len(p_y_list)-1 >= i):  print("%.2f" % p_y_list[i], end="\t")
+#     #     if(len(p_x_y_0)-1 >= i):   print("%.2f" % p_x_y_0[i], end="\t")
+#     #     if(len(p_x_y_1)-1 >= i):   print("%.2f" % p_x_y_1[i])
+
+#     print("\np_x_list:\n", p_x_list)
+#     print("\np_y_list:\n", p_y_list)
+#     print("\np_x_y_eql_0:\n", p_x_y_0)
+#     print("\np_x_y_eql_1:\n", p_x_y_1)
+
+#     for i in range(ig.shape[0]):
+#         entropy_x = 0
+#         entropy_x_y = 0
+
+#         # calculate a single entropy h(x)
+#         x = ig[i]
+#         p_x = p_x_list[x]
+#         entropy_x = -p_x * math.log(p_x, 2)
+
+#         # calculate the h(x|y)
+#         y = labels_s[i]
+#         p_y = p_y_list[y]
+#         factor = p_y
+#         if y == 0:
+#             factor *= p_x_y_0[x]
+#         elif y == 1:
+#             factor *= p_x_y_1[x]
+#         else:
+#             raise ValueError(f"Wrong label value in line {i+1}")
+#         entropy_x_y = -factor * math.log(factor, 2)
+
+#         ig[i] = entropy_x + entropy_x_y
+
+#     print("\n******** Ig of one column *********")
+#     print(ig)
+
+#     return ig
+
+# def calc_all_info_gain(data_df, labels_s):
+#     # calculate info entropy + conditional entropy column by column
+#     ig_mat = copy.deepcopy(data_df)
+#     disc_all = discretize_all(data_df)
+#     for i in range(data_df.shape[1]):
+#         ig_mat.iloc[:, i] = calc_one_column_info_gain(disc_col)
+    
+#     # sum up entropy column by column
+    
+    
+#     return ig_mat
