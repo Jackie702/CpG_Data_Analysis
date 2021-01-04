@@ -9,9 +9,11 @@ FilePath: /CpG_data_analysis/cpgs_selection_v1.0.py
 import numpy as np
 import pandas as pd
 import math
-from itertools import combinations
 import copy
 import argparse
+
+# the switch of printing logs
+test_open = 1
 
 class data_container:
     def __init__(self, cpg_file = "./myNorm_0829model.csv", 
@@ -31,7 +33,8 @@ class data_container:
         self.info_gain_list = []
         self.filtered_ig_list = []
         self.qualified_feature_index = []
-        self.feature_combs = []
+        self.candidate_feature_dict = {}
+        self.selected_feature_combs = []
 
         self.feature_qualified = []
         
@@ -68,7 +71,9 @@ class data_container:
     def read_and_organize_data(self):
         self._read_files()
         self._organize_raw_data()
-        #self.print_data()
+        
+        if test_open:
+            self.print_data()
         return
     
     def save_transformed_csv(self):
@@ -85,15 +90,21 @@ class data_container:
             disc_column = pd.cut(self.cpg_data.iloc[:, i], bins=intervals, labels=disc_values)
             self.discret_data.iloc[:, i] = disc_column
         return
+    
+    # use Labels as X and features as Y
+    def calc_all_feature_info_gain(self):
+        data_and_label = self.discret_data.values
+        
 
     # calculate a columns of info entropy + conditional entropy
     def calc_one_column_info_gain(self, data_column):
         p_x_list = data_column.value_counts() / data_column.shape[0]    # calculate the probility of each x element
         p_y_list = self.label_s.value_counts() / self.label_s.shape[0]          # calculate the probility of each y element
 
-        print("#################################################################################################")
-        print("\np_x_list:\n", p_x_list)
-        print("\np_y_list:\n", p_y_list)
+        if test_open:
+            print("#################################################################################################")
+            print("\np_x_list:\n", p_x_list)
+            print("\np_y_list:\n", p_y_list)
 
         H_x = 0
         for i in range(p_x_list.shape[0]):
@@ -103,35 +114,40 @@ class data_container:
             else:
                 H_x += -(p_x_list[i] * math.log(p_x_list[i], 2))
 
-        print("\nH_x:\n", H_x)
+        if test_open:
+            print("\nH_x:\n", H_x)
 
         # 问题出在这里！！！！！！！！！！！！  data_column的index是TCGA-XX-XXXX-XX， 需要改为序号
         x_label_eql_0 = data_column[self.label_s[data_column.index] == 0]       # get numbers whose label is 0
         x_label_eql_1 = data_column[self.label_s[data_column.index] == 1]       # get numbers whose label is 1
         
-        print(f"x_label_eql_0:\n {x_label_eql_0}")
-        print(f"x_label_eql_1:\n {x_label_eql_1}\n")
+        if test_open:
+            print(f"x_label_eql_0:\n {x_label_eql_0}")
+            print(f"x_label_eql_1:\n {x_label_eql_1}\n")
         
         p_x_y_0 = x_label_eql_0.value_counts() / x_label_eql_0.shape[0]     # calculate p(X|Y=0)
         p_x_y_0 = np.array([n for n in p_x_y_0 if n != 0])                  # eliminate 0 elements for logarithm
         p_x_y_1 = x_label_eql_1.value_counts() / x_label_eql_1.shape[0]     # calculate p(X|Y=1)
         p_x_y_1 = np.array([n for n in p_x_y_1 if n != 0])                  # eliminate 0 elements for logarithm
         
-        print(f"p_x_y_0:\n {p_x_y_0}")
-        print(f"p_x_y_1:\n {p_x_y_1}\n")
+        if test_open:
+            print(f"p_x_y_0:\n {p_x_y_0}")
+            print(f"p_x_y_1:\n {p_x_y_1}\n")
         
         H_x_y_eql_0 = - (p_x_y_0 * np.log2(p_x_y_0)).sum()                  # calculate conditional entropy H(X|Y=0)
         H_x_y_eql_1 = - (p_x_y_1 * np.log2(p_x_y_1)).sum()                  # calculate conditional entropy H(X|Y=1)
         
-        print("\nH_x_y_eql_0:", H_x_y_eql_0)
-        print("\nH_x_y_eql_1:", H_x_y_eql_1)
+        if test_open:
+            print("\nH_x_y_eql_0:", H_x_y_eql_0)
+            print("\nH_x_y_eql_1:", H_x_y_eql_1)
         
         H_x_y = p_y_list[0] * H_x_y_eql_0 + p_y_list[1] * H_x_y_eql_1       # calculate conditon entropy H(X|Y=label)
         
-        print("\nH_x_y:", H_x_y)
-        print("#################################################################################################")
+        if test_open:
+            print("\nH_x_y:", H_x_y)
+            print("#################################################################################################")
 
-        return H_x + H_x_y
+        return H_x - H_x_y
     
     # calculate infomation gain column by column, with sequence number in the list
     # [(index 0, ig 0), (index 1, ig 1), ..., (index N, ig N)]
@@ -145,19 +161,22 @@ class data_container:
         self.info_gain_list.sort(key=lambda x: x[1], reverse=True)  # sort the list in descending order
         
         # eliminate features whose info gain is less than threshold
-        for i in range(len(self.filtered_ig_list)):
-            if self.filtered_ig_list[i][1] >= self.threshold:
-                self.filtered_ig_list.append(self.filtered_ig_list[i])
+        for i in range(len(self.info_gain_list)):
+            if self.info_gain_list[i][1] >= self.ig_threshold:
+                self.filtered_ig_list.append(self.info_gain_list[i])
             else:
                 break
         return
+    
+    def create_candidate_feature_dict(self):
+        for item in self.filtered_ig_list:
+            self.candidate_feature_dict[item[0]] = item[1]
 
     # get combinations of feature by indices
-    def get_feature_combs(self):
-        self.qualified_feature_index = [x[0] for x in self.filtered_ig_list]    # get indices of qualified features
-        index_combs = combinations(self.qualified_feature_index, self.subset_size)
-        for i in range():
-            
+    def get_feature_combs_by_SFFS(self):
+        self.selected_feature_combs
+        for item in range(self.filtered_ig_list):
+            feature_index = item[0]
             for j in range(self.subset_size):
                     pass
 
